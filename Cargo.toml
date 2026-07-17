@@ -30,6 +30,10 @@ path = "src/main.rs"
 name = "demo-backend"
 path = "src/bin/demo_backend.rs"
 
+[[bin]]
+name = "loadgen"
+path = "src/bin/loadgen.rs"
+
 [profile.release]
 lto = true
 codegen-units = 1

@@ -27,7 +27,9 @@ impl ProxyServer {
         // http2 support in the client lets gRPC traffic pass through untouched
         let client = Client::builder(TokioExecutor::new())
             .pool_idle_timeout(std::time::Duration::from_secs(30))
-            .pool_max_idle_per_host(64)
+            // keep plenty of warm upstream conns; churn under high concurrency
+            // piles up TIME_WAIT sockets and tanks throughput
+            .pool_max_idle_per_host(1024)
             .build_http();
         Arc::new(Self {
             pool,
