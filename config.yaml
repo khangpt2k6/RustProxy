@@ -1,0 +1,16 @@
+listen: 0.0.0.0:8080
+metrics_listen: 0.0.0.0:9090
+admin_listen: 0.0.0.0:50051
+strategy: round_robin # or least_connections
+
+backends:
+  - addr: http://127.0.0.1:9001
+  - addr: http://127.0.0.1:9002
+  - addr: http://127.0.0.1:9003
+
+health_check:
+  interval_secs: 5
+  timeout_secs: 2
+  path: /health
+  fall: 3
+  rise: 2
