@@ -1,0 +1,38 @@
+syntax = "proto3";
+
+package rustproxy.admin;
+
+// control plane for managing backends at runtime without a restart
+service Admin {
+  rpc ListBackends(ListBackendsRequest) returns (ListBackendsResponse);
+  rpc AddBackend(AddBackendRequest) returns (AddBackendResponse);
+  rpc RemoveBackend(RemoveBackendRequest) returns (RemoveBackendResponse);
+}
+
+message ListBackendsRequest {}
+
+message BackendInfo {
+  string addr = 1;
+  bool healthy = 2;
+  uint64 active_connections = 3;
+}
+
+message ListBackendsResponse {
+  repeated BackendInfo backends = 1;
+}
+
+message AddBackendRequest {
+  string addr = 1;
+}
+
+message AddBackendResponse {
+  bool added = 1;
+}
+
+message RemoveBackendRequest {
+  string addr = 1;
+}
+
+message RemoveBackendResponse {
+  bool removed = 1;
+}
