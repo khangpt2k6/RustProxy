@@ -1,0 +1,41 @@
+services:
+  proxy:
+    build: .
+    ports:
+      - "8080:8080"   # proxy
+      - "9090:9090"   # prometheus metrics
+      - "50051:50051" # grpc admin
+    volumes:
+      - ./deploy/config.docker.yaml:/etc/rustproxy/config.yaml:ro
+    depends_on:
+      - backend1
+      - backend2
+      - backend3
+
+  backend1:
+    build: .
+    entrypoint: ["demo-backend"]
+    environment:
+      - PORT=9001
+      - BACKEND_NAME=backend-1
+
+  backend2:
+    build: .
+    entrypoint: ["demo-backend"]
+    environment:
+      - PORT=9002
+      - BACKEND_NAME=backend-2
+
+  backend3:
+    build: .
+    entrypoint: ["demo-backend"]
+    environment:
+      - PORT=9003
+      - BACKEND_NAME=backend-3
+
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9091:9090"
+    volumes:
+      - ./deploy/prometheus.yml:/etc/prometheus/prometheus.yml:ro
