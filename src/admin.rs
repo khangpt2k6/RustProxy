@@ -28,6 +28,7 @@ impl Admin for AdminService {
                 addr: b.addr.clone(),
                 healthy: b.is_healthy(),
                 active_connections: b.active_conns() as u64,
+                weight: b.weight(),
             })
             .collect();
         Ok(Response::new(pb::ListBackendsResponse { backends }))
@@ -37,13 +38,16 @@ impl Admin for AdminService {
         &self,
         req: Request<pb::AddBackendRequest>,
     ) -> Result<Response<pb::AddBackendResponse>, Status> {
-        let addr = req.into_inner().addr;
+        let req = req.into_inner();
+        let addr = req.addr;
         if !addr.starts_with("http://") && !addr.starts_with("https://") {
             return Err(Status::invalid_argument("addr must start with http:// or https://"));
         }
-        let added = self.pool.add(addr.clone());
+        // 0 means "caller didn't set one" -> default to an equal share
+        let weight = if req.weight == 0 { 1 } else { req.weight };
+        let added = self.pool.add(addr.clone(), weight);
         if added {
-            info!("admin: added backend {addr}");
+            info!("admin: added backend {addr} (weight {weight})");
         }
         Ok(Response::new(pb::AddBackendResponse { added }))
     }
@@ -58,6 +62,18 @@ impl Admin for AdminService {
             info!("admin: removed backend {addr}");
         }
         Ok(Response::new(pb::RemoveBackendResponse { removed }))
+    }
+
+    async fn set_weight(
+        &self,
+        req: Request<pb::SetWeightRequest>,
+    ) -> Result<Response<pb::SetWeightResponse>, Status> {
+        let req = req.into_inner();
+        let updated = self.pool.set_weight(&req.addr, req.weight);
+        if updated {
+            info!("admin: set weight of {} to {}", req.addr, req.weight);
+        }
+        Ok(Response::new(pb::SetWeightResponse { updated }))
     }
 }
 

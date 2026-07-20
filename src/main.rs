@@ -48,7 +48,10 @@ async fn main() -> anyhow::Result<()> {
     );
 
     let pool = Arc::new(BackendPool::new(
-        cfg.backends.iter().map(|b| b.addr.clone()).collect(),
+        cfg.backends
+            .iter()
+            .map(|b| (b.addr.clone(), b.weight))
+            .collect(),
         cfg.strategy,
     ));
     let metrics = Metrics::new();

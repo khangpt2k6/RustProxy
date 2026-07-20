@@ -7,6 +7,8 @@ service Admin {
   rpc ListBackends(ListBackendsRequest) returns (ListBackendsResponse);
   rpc AddBackend(AddBackendRequest) returns (AddBackendResponse);
   rpc RemoveBackend(RemoveBackendRequest) returns (RemoveBackendResponse);
+  // shift traffic by changing a backend's weight at runtime (canary / drain)
+  rpc SetWeight(SetWeightRequest) returns (SetWeightResponse);
 }
 
 message ListBackendsRequest {}
@@ -15,6 +17,7 @@ message BackendInfo {
   string addr = 1;
   bool healthy = 2;
   uint64 active_connections = 3;
+  uint32 weight = 4;
 }
 
 message ListBackendsResponse {
@@ -23,6 +26,8 @@ message ListBackendsResponse {
 
 message AddBackendRequest {
   string addr = 1;
+  // relative traffic share; 0 is treated as 1 for backward compatibility
+  uint32 weight = 2;
 }
 
 message AddBackendResponse {
@@ -35,4 +40,13 @@ message RemoveBackendRequest {
 
 message RemoveBackendResponse {
   bool removed = 1;
+}
+
+message SetWeightRequest {
+  string addr = 1;
+  uint32 weight = 2;
+}
+
+message SetWeightResponse {
+  bool updated = 1;
 }

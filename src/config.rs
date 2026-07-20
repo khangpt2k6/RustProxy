@@ -26,6 +26,10 @@ pub enum Strategy {
 #[derive(Debug, Clone, Deserialize)]
 pub struct BackendConfig {
     pub addr: String,
+    /// relative share of traffic this backend gets (weighted round robin).
+    /// defaults to 1, so an unweighted config behaves like plain round robin.
+    #[serde(default = "default_weight")]
+    pub weight: u32,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -76,6 +80,9 @@ fn default_fall() -> u32 {
 }
 fn default_rise() -> u32 {
     2
+}
+fn default_weight() -> u32 {
+    1
 }
 
 impl Config {

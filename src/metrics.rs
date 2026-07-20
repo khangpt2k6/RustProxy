@@ -9,6 +9,7 @@ pub struct Metrics {
     pub request_duration: HistogramVec,
     pub active_connections: IntGaugeVec,
     pub healthy_backends: IntGauge,
+    pub backend_weight: IntGaugeVec,
     pub proxy_errors: IntCounterVec,
 }
 
@@ -47,6 +48,15 @@ impl Metrics {
         )
         .unwrap();
 
+        let backend_weight = IntGaugeVec::new(
+            prometheus::opts!(
+                "rustproxy_backend_weight",
+                "Configured traffic weight per backend"
+            ),
+            &["backend"],
+        )
+        .unwrap();
+
         let proxy_errors = IntCounterVec::new(
             prometheus::opts!("rustproxy_errors_total", "Proxy-side errors"),
             &["kind"],
@@ -63,6 +73,7 @@ impl Metrics {
         registry
             .register(Box::new(healthy_backends.clone()))
             .unwrap();
+        registry.register(Box::new(backend_weight.clone())).unwrap();
         registry.register(Box::new(proxy_errors.clone())).unwrap();
 
         Arc::new(Self {
@@ -71,6 +82,7 @@ impl Metrics {
             request_duration,
             active_connections,
             healthy_backends,
+            backend_weight,
             proxy_errors,
         })
     }

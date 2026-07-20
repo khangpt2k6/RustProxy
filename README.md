@@ -3,10 +3,12 @@
 High performance async reverse proxy built on Tokio and Hyper.
 
 - request routing to a pool of backend services
-- load balancing: round robin or least connections
+- load balancing: round robin, weighted round robin (smooth/SWRR), or least connections
+- runtime traffic shifting - change a backend's weight on the fly for canary rollouts or draining
 - active health checks with fall/rise thresholds (flap protection)
-- gRPC control plane (tonic) - add/remove backends at runtime, no restart
-- Prometheus metrics: request counts, latency histograms, in-flight connections, healthy backend gauge
+- gRPC control plane (tonic) - add/remove backends and reweight at runtime, no restart
+- lock-free request path: routing reads an atomically-swapped snapshot, no lock per request
+- Prometheus metrics: request counts, latency histograms, in-flight connections, healthy backend + weight gauges
 - built-in demo backend and load generator binaries
 
 ## Architecture
@@ -26,9 +28,20 @@ High performance async reverse proxy built on Tokio and Hyper.
 
 Every accepted connection is served on its own tokio task. Upstream requests
 go through a shared hyper client with a warm connection pool, so hot paths
-don't pay connect cost. Backend state (health, in-flight counts) is lock-free
-atomics; the backend list itself is behind an RwLock that's only write-locked
-by the admin API.
+don't pay connect cost.
+
+The request path is lock-free. Backend state (health, in-flight counts) is
+plain atomics, and the backend list plus its precomputed weighted pick order
+live in an immutable `Ring` snapshot behind an `ArcSwap`. `pick()` does one
+atomic load of the current ring (plus an atomic cursor bump for round robin) -
+no mutex, no reader-writer lock, nothing to contend on under load. The control
+plane (add / remove / reweight) builds a fresh `Ring` and atomically swaps it
+in; in-flight requests keep serving from the old snapshot until they drop it.
+
+Weighting uses smooth weighted round robin (the nginx SWRR algorithm): a 5:1
+split interleaves as `a a b a a a` rather than firing five in a row, so bursts
+stay even. Weight 0 drains a backend without removing it, which is what runtime
+traffic shifting rides on.
 
 ## Quick start
 
@@ -57,12 +70,19 @@ docker compose up --build
 
 ```sh
 cargo run --example admin_client -- list
-cargo run --example admin_client -- add http://127.0.0.1:9004
+cargo run --example admin_client -- add http://127.0.0.1:9004 2   # addr + weight
 cargo run --example admin_client -- remove http://127.0.0.1:9004
+cargo run --example admin_client -- weight http://127.0.0.1:9004 5 # reweight live
 ```
 
 New backends take traffic immediately; removed ones drain naturally since
 in-flight requests hold their own Arc to the backend.
+
+Traffic shifting: reweight a backend to move its share of traffic without a
+restart. Set a new backend to a low weight, watch it, then ramp it up (canary);
+or set an old one to `0` to drain it before removal. Verified end to end - with
+weights `9001:3, 9002:1`, 40 requests split exactly 30/10, and dropping 9001 to
+`0` sent all 40 to 9002.
 
 ## Config
 
@@ -74,7 +94,9 @@ strategy: round_robin # or least_connections
 
 backends:
   - addr: http://127.0.0.1:9001
+    weight: 3 # optional, defaults to 1. round-robin picks in proportion to weight
   - addr: http://127.0.0.1:9002
+    weight: 1
 
 health_check:
   interval_secs: 5
@@ -113,6 +135,7 @@ the warm pool to 1024 got it back to zero errors.
 | `rustproxy_request_duration_seconds` | histogram | backend |
 | `rustproxy_active_connections` | gauge | backend |
 | `rustproxy_healthy_backends` | gauge | |
+| `rustproxy_backend_weight` | gauge | backend |
 | `rustproxy_errors_total` | counter | kind |
 
 ## Tests
@@ -121,5 +144,6 @@ the warm pool to 1024 got it back to zero errors.
 cargo test
 ```
 
-Covers balancer strategies, health fall/rise state machine, conn guard
-accounting, and pool add/remove.
+Covers balancer strategies, weighted (SWRR) distribution and schedule
+smoothness, runtime reweighting / draining, the health fall/rise state machine,
+conn guard accounting, and pool add/remove.

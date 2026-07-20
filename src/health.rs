@@ -74,6 +74,12 @@ impl HealthChecker {
             if backend.is_healthy() {
                 healthy += 1;
             }
+            // keep the weight gauge current so runtime traffic shifts show up
+            // in Prometheus within one probe interval
+            self.metrics
+                .backend_weight
+                .with_label_values(&[&backend.addr])
+                .set(backend.weight() as i64);
         }
         self.metrics.healthy_backends.set(healthy);
     }
